@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "auto-post-worker",
+  "account_id": "807176df01112fa99fe40e58e7a4b3e0",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-02-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "vars": {
+    "WORKER_MODE": "live",
+    "LEASE_SECONDS": "300",
+    "MAX_TARGETS_PER_RUN": "8",
+    "FACEBOOK_GRAPH_VERSION": "v27.0",
+    "FACEBOOK_LIVE_ENABLED": "true",
+    "YOUTUBE_LIVE_ENABLED": "true",
+    "YOUTUBE_PRIVACY_STATUS": "public",
+    "TIKTOK_LIVE_ENABLED": "true",
+    "TIKTOK_PRIVACY_LEVEL": "PUBLIC_TO_EVERYONE",
+    "X_LIVE_ENABLED": "false"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
+

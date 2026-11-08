@@ -1,0 +1,10 @@
+# Optional worker override. Page credentials are NEVER added to the web service.
+# docker compose -f compose.yaml -f compose.facebook.yaml --profile worker up --build -d
+services:
+  worker:
+    env_file:
+      - .env.worker
+      - .env.facebook
+    environment:
+      WORKER_MODE: simulation
+      FACEBOOK_LIVE_ENABLED: "false"

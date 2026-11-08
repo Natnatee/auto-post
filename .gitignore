@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+.env*
+!.env.example
+!.env.worker.example
+.dev.vars*
+.wrangler/
+*.tsbuildinfo
+__pycache__/
+*.pyc
+.venv/
+coverage/
+test-results/
+playwright-report/
+media/
+.DS_Store
