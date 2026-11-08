@@ -2,9 +2,12 @@ export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 export function assertOrigin(request: Request, configuredOrigin: string) {
-  if (!configuredOrigin || request.headers.get("origin") !== new URL(configuredOrigin).origin) {
-    throw new HttpError(403, "Origin ไม่ได้รับอนุญาต ตรวจ APP_ORIGIN");
-  }
+  const origin = request.headers.get("origin");
+  if (!origin) throw new HttpError(403, "Origin ไม่ได้รับอนุญาต");
+  if (configuredOrigin && origin === new URL(configuredOrigin).origin) return;
+  if (process.env.VERCEL_URL && origin === `https://${process.env.VERCEL_URL}`) return;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL && origin === `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) return;
+  throw new HttpError(403, "Origin ไม่ได้รับอนุญาต ตรวจ APP_ORIGIN");
 }
 export async function readJson(request: Request): Promise<unknown> {
   if (request.headers.get("content-type")?.split(";")[0].trim() !== "application/json") {

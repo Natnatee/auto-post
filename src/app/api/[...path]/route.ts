@@ -29,7 +29,7 @@ async function handle(request: NextRequest, context: Context) {
     }
     const client = createServerClient(url, key, {
       cookies: { getAll: () => request.cookies.getAll(), setAll: values => { pending.push(...values); } },
-      cookieOptions: { sameSite: "lax", httpOnly: true, secure: new URL(process.env.APP_ORIGIN || "http://localhost:3000").protocol === "https:" },
+      cookieOptions: { sameSite: "lax", httpOnly: true, secure: process.env.NODE_ENV === "production" || new URL(process.env.APP_ORIGIN || "http://localhost:3000").protocol === "https:" },
     });
     if (request.method === "POST" && path === "auth/logout") {
       const { error } = await client.auth.signOut();
