@@ -6,6 +6,12 @@
 - **บัญชีผู้ดูแล (Admin Login):**
   - **Email:** `drawnewtrio@gmail.com`
   - **Password:** `mond47159`
+- **TikTok Developer App:**
+  - **App Name:** `Elephant-Maker` (App ID: `7705554771972950023`)
+  - **Status:** `In review` ⏳ (ยื่นตรวจ Production Review เมื่อ 2026-11-08)
+  - **Domain Verification:** Verified บน `https://auto-post-orpin.vercel.app/` ผ่าน `public/tiktokiI9scRn7ffrgJyFV3KUBHyWfUnCOYunC.txt`
+  - **Scopes:** `user.info.basic`, `video.publish`, `video.upload` (Direct Post: ON)
+
 
 เว็บส่วนตัวแบบเรียบง่าย ธีมฟ้า–ขาว มีสองหน้า: `/` สำหรับอัปโหลด/สร้าง/แก้ไข และ `/library` สำหรับดูโปรเจกต์ทั้งหมด พร้อมวงกลมหมุนระหว่างโหลดข้อมูลหรือบันทึก
 
