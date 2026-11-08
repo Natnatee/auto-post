@@ -1,5 +1,12 @@
 # Autopost — ศูนย์จัดการโพสต์ส่วนตัว
 
+## ข้อมูลเข้าสู่ระบบ & Deployment
+
+- **Production URL (Vercel):** `https://auto-post-orpin.vercel.app/`
+- **บัญชีผู้ดูแล (Admin Login):**
+  - **Email:** `drawnewtrio@gmail.com`
+  - **Password:** `mond47159`
+
 เว็บส่วนตัวแบบเรียบง่าย ธีมฟ้า–ขาว มีสองหน้า: `/` สำหรับอัปโหลด/สร้าง/แก้ไข และ `/library` สำหรับดูโปรเจกต์ทั้งหมด พร้อมวงกลมหมุนระหว่างโหลดข้อมูลหรือบันทึก
 
 **ไม่มี Pi อยู่ในเส้นทางรับส่งไฟล์** มือถือ/คอมอัปโหลดตรงเข้า private cloud storage ส่วนเว็บรับเฉพาะ JSON metadata และ cloud worker ดูแลคิว
