@@ -23,35 +23,105 @@ async function api<T>(url: string, body?: unknown): Promise<T> {
   if (!response.ok) throw new Error("request failed");
   return response.json() as Promise<T>;
 }
+export const DEFAULT_MCU_TAGS = [
+  "งานประดิษฐ์",
+  "diy",
+  "esp32",
+  "arduino",
+  "iot",
+  "maker",
+  "อิเล็กทรอนิกส์",
+  "tiktokuni",
+];
+
+export const SUGGESTED_MCU_TAGS = [
+  "งานประดิษฐ์",
+  "diy",
+  "esp32",
+  "arduino",
+  "iot",
+  "maker",
+  "อิเล็กทรอนิกส์",
+  "tiktokuni",
+  "robotics",
+  "สิ่งประดิษฐ์",
+  "สมองกลฝังตัว",
+  "เทคโนโลยี",
+  "โครงงาน",
+];
+
+export type TargetStatus = {
+  id: string;
+  platform: string;
+  status: string;
+  attempts?: number;
+  error?: string | null;
+  published_url?: string | null;
+  external_post_id?: string | null;
+  delivery_uncertain?: boolean;
+  created_at: string;
+};
+
+export type PostStatus = {
+  id: string;
+  project_id?: string | null;
+  title: string;
+  description?: string;
+  hashtags: string[];
+  scheduled_at: string;
+  status: string;
+  execution_mode?: string;
+  created_at: string;
+  targets: TargetStatus[];
+};
+
+const PLATFORM_ICONS: Record<string, { label: string; icon: string; themeClass: string }> = {
+  facebook: { label: "Facebook", icon: "📘", themeClass: "btn-platform-fb" },
+  youtube: { label: "YouTube", icon: "▶️", themeClass: "btn-platform-yt" },
+  tiktok: { label: "TikTok", icon: "🎵", themeClass: "btn-platform-tt" },
+  x: { label: "X (Twitter)", icon: "🐦", themeClass: "btn-platform-x" },
+};
+
 function defaultTags() {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem("autopost.default-tags") || '["สร้างสรรค์"]');
-    if (Array.isArray(value) && value.length <= 30 && value.every(tag => typeof tag === "string" && tag.length <= 100 && !/[\s,]/.test(tag))) return parseTags(value.join(" ")); 
+    const raw = localStorage.getItem("autopost.default-tags");
+    if (raw) {
+      const value: unknown = JSON.parse(raw);
+      if (Array.isArray(value) && value.length <= 30 && value.every(tag => typeof tag === "string" && tag.length <= 100 && !/[\s,]/.test(tag))) {
+        if (value.length === 1 && value[0] === "สร้างสรรค์") {
+          return DEFAULT_MCU_TAGS;
+        }
+        return parseTags(value.join(" "));
+      }
+    }
   } catch {}
-  return [];
+  return DEFAULT_MCU_TAGS;
 }
 
 function Spinner({ label }: { label: string }) {
   return <span className="loading-status" role="status" aria-label={label}><span className="spinner" aria-hidden="true" /></span>;
 }
 
-export function ContentLibrary({ view = "upload" }: { view?: "upload" | "projects" }) {
+export function ContentLibrary({ view = "upload" }: { view?: "upload" | "projects" | "status" }) {
   const router = useRouter();
   const initializedEdit = useRef(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-    const [loggingOut, setLoggingOut] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
+  const [postStatuses, setPostStatuses] = useState<PostStatus[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "published" | "failed">("all");
+  const [retryingTargets, setRetryingTargets] = useState<Set<string>>(new Set());
 
   const [editing, setEditing] = useState<Project | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-    const [tagInput, setTagInput] = useState("");
-    const [price, setPrice] = useState("");
+  const [tagInput, setTagInput] = useState("");
+  const [price, setPrice] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const fingerprints = useRef(new Map<string, string>());
@@ -63,19 +133,40 @@ export function ContentLibrary({ view = "upload" }: { view?: "upload" | "project
   const lock = useRef(false);
   const activeUpload = useRef<Upload | null>(null);
   const mounted = useRef(true);
+
   useEffect(() => {
     mounted.current = true;
     setTags(defaultTags());
     void load();
     return () => { mounted.current = false; void activeUpload.current?.abort().catch(() => {}); };
-  }, []);
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== "status" || !dashboard?.authenticated) return;
+    const hasActive = postStatuses.some(
+      p => ["queued", "processing"].includes(p.status) || p.targets?.some(t => ["pending", "processing"].includes(t.status))
+    );
+    if (!hasActive) return;
+    const timer = setInterval(async () => {
+      try {
+        const data = await api<{ posts: PostStatus[] }>("/api/status");
+        if (mounted.current) setPostStatuses(data.posts || []);
+      } catch {}
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [view, dashboard?.authenticated, postStatuses]);
+
   async function load() {
     setLoading(true);
-      try {
-        const result = await api<Dashboard>("/api/dashboard");
-        if (!mounted.current) return;
-        setDashboard(result); setMedia(result.media || []);
-        if (result.configured && result.authenticated && result.owner && !result.demo) {
+    try {
+      const result = await api<Dashboard>("/api/dashboard");
+      if (!mounted.current) return;
+      setDashboard(result); setMedia(result.media || []);
+      if (result.configured && result.authenticated && result.owner && !result.demo) {
+        if (view === "status") {
+          const data = await api<{ posts: PostStatus[] }>("/api/status");
+          if (mounted.current) setPostStatuses(data.posts || []);
+        } else {
           const data = await api<{ projects: Project[] }>("/api/projects");
           if (mounted.current) {
             setProjects(data.projects);
@@ -90,8 +181,32 @@ export function ContentLibrary({ view = "upload" }: { view?: "upload" | "project
             }
           }
         }
-      } catch { if (mounted.current) setError("โหลดไม่สำเร็จ"); }
-      finally { if (mounted.current) setLoading(false); }
+      }
+    } catch { if (mounted.current) setError("โหลดไม่สำเร็จ"); }
+    finally { if (mounted.current) setLoading(false); }
+  }
+
+  async function retryTarget(targetId: string) {
+    if (retryingTargets.has(targetId) || !mounted.current) return;
+    setRetryingTargets(prev => new Set(prev).add(targetId));
+    setError("");
+    setNotice("");
+    try {
+      await api(`/api/targets/${encodeURIComponent(targetId)}/retry`, {});
+      if (mounted.current) setNotice("ส่งคำสั่งลองใหม่เรียบร้อยแล้ว");
+      const data = await api<{ posts: PostStatus[] }>("/api/status");
+      if (mounted.current) setPostStatuses(data.posts || []);
+    } catch (cause) {
+      if (mounted.current) setError(cause instanceof Error ? cause.message : "ลองใหม่ไม่สำเร็จ");
+    } finally {
+      if (mounted.current) {
+        setRetryingTargets(prev => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+      }
+    }
   }
   async function authenticate(logout = false) {
     if (lock.current) return;
@@ -224,12 +339,52 @@ export function ContentLibrary({ view = "upload" }: { view?: "upload" | "project
     } catch { popup?.close(); if (mounted.current) setError("เปิดไฟล์ไม่สำเร็จ"); }
     finally { if (mounted.current) setPreview(""); }
   }
+  const filteredPosts = postStatuses.filter(post => {
+    if (statusFilter === "all") return true;
+    if (statusFilter === "active") {
+      return (
+        ["queued", "processing"].includes(post.status) ||
+        post.targets?.some(t => ["pending", "processing"].includes(t.status))
+      );
+    }
+    if (statusFilter === "published") {
+      return post.targets?.some(t => ["published", "simulated"].includes(t.status));
+    }
+    if (statusFilter === "failed") {
+      return (
+        post.status === "failed" ||
+        post.targets?.some(t => ["failed", "blocked"].includes(t.status) || t.delivery_uncertain)
+      );
+    }
+    return true;
+  });
+
   return <main className="workspace library-workspace">
-    <header><Link className="brand" href="/" onClick={() => { if (view === "upload" && !busy) reset(); }}>auto<span>post</span></Link><nav aria-label="เมนู"><Link href="/" onClick={() => { if (view === "upload" && !busy) reset(); }} aria-current={view === "upload" ? "page" : undefined}>อัปโหลด</Link><Link href="/projects" aria-current={view === "projects" ? "page" : undefined}>โปรเจกต์</Link></nav>{dashboard?.authenticated && <button className="logout" disabled={busy || loading} onClick={() => void authenticate(true)}>{loggingOut ? <Spinner label="กำลังออกจากระบบ" /> : "ออกจากระบบ"}</button>}</header>
-    <h1>{view === "upload" ? editing ? "แก้ไขโปรเจกต์" : "อัปโหลด" : "โปรเจกต์"}</h1>
+    <header>
+      <Link className="brand" href="/" onClick={() => { if (view === "upload" && !busy) reset(); }}>
+        auto<span>post</span>
+      </Link>
+      <nav aria-label="เมนู">
+        <Link href="/" onClick={() => { if (view === "upload" && !busy) reset(); }} aria-current={view === "upload" ? "page" : undefined}>
+          อัปโหลด
+        </Link>
+        <Link href="/projects" aria-current={view === "projects" ? "page" : undefined}>
+          โปรเจกต์
+        </Link>
+        <Link href="/status" aria-current={view === "status" ? "page" : undefined}>
+          ติดตามสถานะ
+        </Link>
+      </nav>
+      {dashboard?.authenticated && (
+        <button className="logout" disabled={busy || loading} onClick={() => void authenticate(true)}>
+          {loggingOut ? <Spinner label="กำลังออกจากระบบ" /> : "ออกจากระบบ"}
+        </button>
+      )}
+    </header>
+    <h1>{view === "upload" ? editing ? "แก้ไขโปรเจกต์" : "อัปโหลด" : view === "projects" ? "โปรเจกต์" : "ติดตามสถานะการเผยแพร่"}</h1>
     {error && <p className="error" role="alert">{error}</p>}
     {notice && <p className="success" role="status">{notice}</p>}
-    {loading ? <Spinner label="กำลังโหลดโปรเจกต์" /> : !dashboard ? <button onClick={() => void load()}>ลองอีกครั้ง</button> : dashboard.configured && !dashboard.demo && !dashboard.authenticated ? <form className="login-form card" onSubmit={event => { event.preventDefault(); void authenticate(); }}><label>อีเมล<input type="email" autoComplete="username" required value={email} disabled={busy} onChange={event => setEmail(event.target.value)} /></label><label>รหัสผ่าน<input type="password" autoComplete="current-password" required value={password} disabled={busy} onChange={event => setPassword(event.target.value)} /></label><button className="primary" disabled={busy}>{busy ? <Spinner label="กำลังเข้าสู่ระบบ" /> : "เข้าสู่ระบบ"}</button></form> : dashboard.configured && !dashboard.demo && !dashboard.owner ? <p>ไม่มีสิทธิ์เข้าใช้งาน</p> : <>
+    {loading ? <Spinner label="กำลังโหลดข้อมูล" /> : !dashboard ? <button onClick={() => void load()}>ลองอีกครั้ง</button> : dashboard.configured && !dashboard.demo && !dashboard.authenticated ? <form className="login-form card" onSubmit={event => { event.preventDefault(); void authenticate(); }}><label>อีเมล<input type="email" autoComplete="username" required value={email} disabled={busy} onChange={event => setEmail(event.target.value)} /></label><label>รหัสผ่าน<input type="password" autoComplete="current-password" required value={password} disabled={busy} onChange={event => setPassword(event.target.value)} /></label><button className="primary" disabled={busy}>{busy ? <Spinner label="กำลังเข้าสู่ระบบ" /> : "เข้าสู่ระบบ"}</button></form> : dashboard.configured && !dashboard.demo && !dashboard.owner ? <p>ไม่มีสิทธิ์เข้าใช้งาน</p> : <>
       {(!dashboard.configured || dashboard.demo) && <span className="badge">DEMO</span>}
       {view === "upload" ? <form className="library-form" noValidate onSubmit={event => { event.preventDefault(); void save(); }}>
         {editing && <div className="row"><h2>แก้ไขโปรเจกต์</h2><button type="button" disabled={busy} onClick={reset}>เริ่มใหม่</button></div>}
@@ -241,13 +396,68 @@ export function ContentLibrary({ view = "upload" }: { view?: "upload" | "project
             {pending.filter(item => item.role === role).map(item => <div className="row" key={item.id}><span className="library-filename">{item.file.name} · {label} · รอบันทึก</span><button type="button" disabled={busy} aria-label={`นำ${item.file.name}ออก`} onClick={() => setPending(current => current.filter(value => value.id !== item.id))}>×</button></div>)}
           </fieldset>)}
           <label>ชื่อโปรเจกต์<input required maxLength={500} value={title} onChange={event => setTitle(event.target.value)} /></label>
-          <div className="library-tag-field"><label htmlFor="library-tag-input">แท็ก</label><div className="library-tag-chips">{tags.map(tag => <button key={tag} type="button" aria-label={`ลบแท็ก ${tag}`} onClick={() => setTags(current => current.filter(value => value !== tag))}>{tag} ×</button>)}</div><div className="library-tag-entry"><input id="library-tag-input" aria-label="แท็ก" placeholder="แท็กใหม่" value={tagInput} onChange={event => setTagInput(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); addTags(); } }} /><button type="button" aria-label="เพิ่มแท็ก" onClick={addTags}>+</button></div></div>
+          <div className="library-tag-field">
+            <label htmlFor="library-tag-input">แท็ก ({tags.length}/30)</label>
+            <div className="library-tag-chips">
+              {tags.map(tag => (
+                <button key={tag} type="button" aria-label={`ลบแท็ก ${tag}`} onClick={() => setTags(current => current.filter(value => value !== tag))}>
+                  #{tag} ×
+                </button>
+              ))}
+            </div>
+            <div className="library-tag-entry">
+              <input
+                id="library-tag-input"
+                aria-label="แท็ก"
+                placeholder="พิมพ์แท็กใหม่..."
+                value={tagInput}
+                onChange={event => setTagInput(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    addTags();
+                  }
+                }}
+              />
+              <button type="button" aria-label="เพิ่มแท็ก" onClick={addTags}>
+                +
+              </button>
+            </div>
+            <div className="suggested-tags-wrapper">
+              <span className="suggested-tags-title">💡 แท็กแนะนำยอดนิยมสำหรับ MCU / งานประดิษฐ์ (คลิกเพื่อเพิ่ม/ลบ):</span>
+              <div className="suggested-tags-chips">
+                {SUGGESTED_MCU_TAGS.map(sTag => {
+                  const isSelected = tags.includes(sTag);
+                  return (
+                    <button
+                      key={sTag}
+                      type="button"
+                      className={`suggested-tag-btn ${isSelected ? "selected" : ""}`}
+                      onClick={() => {
+                        if (isSelected) {
+                          setTags(tags.filter(t => t !== sTag));
+                        } else {
+                          if (tags.length >= 30) {
+                            setError("แท็กไม่เกิน 30 แท็ก");
+                            return;
+                          }
+                          setTags([...tags, sTag]);
+                        }
+                      }}
+                    >
+                      {isSelected ? `✓ #${sTag}` : `+ #${sTag}`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
           <label>ราคา (บาท)<input type="number" min="0" max="9999999999.99" step="0.01" inputMode="decimal" value={price} onChange={event => setPrice(event.target.value)} /></label>
           <label>คำอธิบาย<textarea rows={4} maxLength={5000} value={description} onChange={event => setDescription(event.target.value)} /></label>
         </fieldset>
         {progress !== null && <div role="status"><progress max={100} value={progress} aria-label="อัปโหลด" />{progress}%</div>}
         <button className="primary" type="submit" disabled={busy || !authorized}>{busy ? <Spinner label={progress !== null ? "กำลังอัปโหลด" : "กำลังบันทึก"} /> : "บันทึก"}</button>
-      </form> : <section className="page-section" aria-label="โปรเจกต์">{projects.length === 0 ? <div className="empty-state"><p>ไม่มีโปรเจกต์</p><Link href="/">อัปโหลด</Link></div> : projects.map(project => <article className="card" key={project.id}><div className="row"><h2>{project.title}</h2><Link className="edit-link" href={`/?edit=${encodeURIComponent(project.id)}`}>แก้ไข</Link></div>{project.price != null && <p>{new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" }).format(project.price)}</p>}{project.description && <p className="post-description">{project.description}</p>}{project.hashtags.length > 0 && <p className="muted">{project.hashtags.map(tag => `#${tag}`).join(" ")}</p>}<div className="library-assets">{project.assets.map(asset => {
+      </form> : view === "projects" ? <section className="page-section" aria-label="โปรเจกต์">{projects.length === 0 ? <div className="empty-state"><p>ไม่มีโปรเจกต์</p><Link href="/">อัปโหลด</Link></div> : projects.map(project => <article className="card" key={project.id}><div className="row"><h2>{project.title}</h2><Link className="edit-link" href={`/?edit=${encodeURIComponent(project.id)}`}>แก้ไข</Link></div>{project.price != null && <p>{new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" }).format(project.price)}</p>}{project.description && <p className="post-description">{project.description}</p>}{project.hashtags.length > 0 && <p className="muted">{project.hashtags.map(tag => `#${tag}`).join(" ")}</p>}<div className="library-assets">{project.assets.map(asset => {
   const roleInfo = roles.find(item => item.role === asset.role);
   const isVideo = asset.role === "video" || asset.media?.mime_type === "video/mp4";
   const icon = isVideo ? "🎬" : asset.role === "cover" ? "🖼️" : "📷";
@@ -260,7 +470,170 @@ export function ContentLibrary({ view = "upload" }: { view?: "upload" | "project
       </span>
     )}
   </button>;
-})}</div><ProjectPublishing project={project} disabled={!authorized || busy} /></article>)}</section>}
+})}</div><ProjectPublishing project={project} disabled={!authorized || busy} /></article>)}</section> : (
+        <section className="page-section" aria-label="ติดตามสถานะ">
+          <div className="status-header-row">
+            <div>
+              <p className="muted">ตรวจสอบผลการเผยแพร่โปรเจกต์ไปยังทุกช่องทางแบบเรียลไทม์</p>
+            </div>
+            <button type="button" className="refresh-btn" disabled={loading} onClick={() => void load()}>
+              {loading ? <Spinner label="กำลังรีเฟรช" /> : "🔄 รีเฟรชข้อมูล"}
+            </button>
+          </div>
+
+          <div className="status-filter-group" role="tablist" aria-label="ตัวกรองสถานะ">
+            <button
+              type="button"
+              className={`status-filter-btn ${statusFilter === "all" ? "active" : ""}`}
+              onClick={() => setStatusFilter("all")}
+            >
+              ทั้งหมด ({postStatuses.length})
+            </button>
+            <button
+              type="button"
+              className={`status-filter-btn ${statusFilter === "active" ? "active" : ""}`}
+              onClick={() => setStatusFilter("active")}
+            >
+              ⏳ กำลังดำเนินการ ({postStatuses.filter(p => ["queued", "processing"].includes(p.status) || p.targets?.some(t => ["pending", "processing"].includes(t.status))).length})
+            </button>
+            <button
+              type="button"
+              className={`status-filter-btn ${statusFilter === "published" ? "active" : ""}`}
+              onClick={() => setStatusFilter("published")}
+            >
+              ✅ เผยแพร่แล้ว ({postStatuses.filter(p => p.targets?.some(t => ["published", "simulated"].includes(t.status))).length})
+            </button>
+            <button
+              type="button"
+              className={`status-filter-btn ${statusFilter === "failed" ? "active" : ""}`}
+              onClick={() => setStatusFilter("failed")}
+            >
+              ⚠️ มีปัญหา ({postStatuses.filter(p => p.status === "failed" || p.targets?.some(t => ["failed", "blocked"].includes(t.status) || t.delivery_uncertain)).length})
+            </button>
+          </div>
+
+          {filteredPosts.length === 0 ? (
+            <div className="empty-state">
+              <p>{postStatuses.length === 0 ? "ยังไม่มีประวัติการเผยแพร่" : "ไม่พบรายการตามตัวกรองที่เลือก"}</p>
+              <Link href="/projects">ไปที่หน้าโปรเจกต์</Link>
+            </div>
+          ) : (
+            filteredPosts.map(post => {
+              const hasPendingTarget = post.targets?.some(t => ["pending", "processing"].includes(t.status));
+              const isLive = post.execution_mode === "live";
+              return (
+                <article className="card status-card" key={post.id}>
+                  <div className="status-card-header">
+                    <div className="status-card-title-group">
+                      <div className="status-card-badges">
+                        <span className={`execution-badge ${isLive ? "badge-live" : "badge-sim"}`}>
+                          {isLive ? "🔴 โพสต์จริง" : "🧪 จำลอง"}
+                        </span>
+                        <span className="post-date-badge">
+                          📅 สร้างเมื่อ: {new Date(post.created_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}
+                        </span>
+                        {post.scheduled_at && new Date(post.scheduled_at).getTime() > new Date(post.created_at).getTime() + 60000 && (
+                          <span className="post-schedule-badge">
+                            ⏰ ตั้งเวลา: {new Date(post.scheduled_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}
+                          </span>
+                        )}
+                      </div>
+                      <h2>{post.title}</h2>
+                      {post.description && <p className="post-description status-desc-preview">{post.description}</p>}
+                      {post.hashtags?.length > 0 && (
+                        <p className="muted status-hashtags">{post.hashtags.map(tag => `#${tag}`).join(" ")}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="status-targets-list">
+                    <div className="targets-header-row">
+                      <span className="targets-title">สถานะแต่ละช่องทาง:</span>
+                      {hasPendingTarget && (
+                        <span className="targets-live-indicator">
+                          <Spinner label="กำลังส่งข้อมูล" /> ระบบกำลังดำเนินการอัตโนมัติ...
+                        </span>
+                      )}
+                    </div>
+
+                    {post.targets?.length === 0 ? (
+                      <p className="muted">ไม่มีแพลตฟอร์มปลายทาง</p>
+                    ) : (
+                      post.targets?.map(target => {
+                        const meta = PLATFORM_ICONS[target.platform] || {
+                          label: target.platform,
+                          icon: "🌐",
+                          themeClass: "",
+                        };
+                        const canRetry = ["failed", "blocked"].includes(target.status) && !target.delivery_uncertain;
+                        const isRetrying = retryingTargets.has(target.id);
+
+                        return (
+                          <div key={target.id} className="target-status-row">
+                            <div className="target-platform-info">
+                              <span className="target-platform-icon" aria-hidden="true">{meta.icon}</span>
+                              <strong className="target-platform-name">{meta.label}</strong>
+                              {target.status === "published" ? (
+                                <span className="status-badge status-published">✅ เผยแพร่แล้ว</span>
+                              ) : target.status === "simulated" ? (
+                                <span className="status-badge status-simulated">🧪 จำลองสำเร็จ</span>
+                              ) : ["pending", "processing"].includes(target.status) ? (
+                                <span className="status-badge status-pending">
+                                  <Spinner label="กำลังส่งข้อมูล" /> กำลังส่ง...
+                                </span>
+                              ) : target.status === "failed" ? (
+                                <span className="status-badge status-failed">❌ ล้มเหลว</span>
+                              ) : (
+                                <span className="status-badge status-blocked">⛔ ติดเงื่อนไข / ถูกระงับ</span>
+                              )}
+                            </div>
+
+                            <div className="target-actions">
+                              {target.published_url && (
+                                <a
+                                  href={target.published_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="view-post-link"
+                                >
+                                  ดูโพสต์จริง ↗
+                                </a>
+                              )}
+
+                              {canRetry && (
+                                <button
+                                  type="button"
+                                  className="retry-target-btn"
+                                  disabled={isRetrying}
+                                  onClick={() => void retryTarget(target.id)}
+                                >
+                                  {isRetrying ? <Spinner label="กำลังลองใหม่" /> : "🔄 ลองใหม่"}
+                                </button>
+                              )}
+                            </div>
+
+                            {target.delivery_uncertain && (
+                              <p className="error target-error-msg">
+                                ⚠️ ผลการส่งไม่แน่นอน กรุณาเข้าตรวจบน {meta.label} โดยตรง ห้ามกดส่งซ้ำ
+                              </p>
+                            )}
+
+                            {target.error && (
+                              <p className="error target-error-msg">
+                                ข้อผิดพลาด: {target.error}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </section>
+      )}
     </>}
   </main>;
 }

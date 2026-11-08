@@ -383,6 +383,11 @@ export function validateContent(
     parts.push(formatPriceBaht(snap.price));
   }
 
+  const websiteUrl = "https://www.elephant-maker.com/";
+  if (!parts.some((p) => p.includes("elephant-maker.com"))) {
+    parts.push(`🌐 ดูเพิ่มเติมได้ที่: ${websiteUrl}`);
+  }
+
   let tags = snap.hashtags ?? [];
   if (typeof tags === "string") {
     tags = tags.trim() ? tags.trim().split(/\s+/) : [];

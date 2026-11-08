@@ -109,6 +109,30 @@ function Spinner({ label }: { label: string }) {
   );
 }
 
+function getNextOccurrence(hour: number, minute: number): { iso: string; localInput: string; display: string } {
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(hour, minute, 0, 0);
+
+  if (target.getTime() <= now.getTime() + 2 * 60 * 1000) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  const year = target.getFullYear();
+  const month = String(target.getMonth() + 1).padStart(2, "0");
+  const day = String(target.getDate()).padStart(2, "0");
+  const hh = String(target.getHours()).padStart(2, "0");
+  const mm = String(target.getMinutes()).padStart(2, "0");
+
+  const localInput = `${year}-${month}-${day}T${hh}:${mm}`;
+  const isTomorrow = target.getDate() !== now.getDate();
+  const display = `${isTomorrow ? "พรุ่งนี้ " : "วันนี้ "}${hh}:${mm} น.`;
+
+  return { iso: target.toISOString(), localInput, display };
+}
+
+type PresetOption = "now" | "1130" | "2000" | "2200" | "custom";
+
 export default function ProjectPublishing({ project, disabled = false }: { project: Project; disabled?: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -122,6 +146,7 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
   );
   // Schedule: Default to "ทันที" (Immediate = null)
   const [scheduleMode, setScheduleMode] = useState<"immediate" | "scheduled">("immediate");
+  const [selectedPreset, setSelectedPreset] = useState<PresetOption>("now");
   const [scheduledDateTime, setScheduledDateTime] = useState<string>("");
 
   const [open, setOpen] = useState(false);
@@ -183,10 +208,14 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
     };
   }, [open, project.id, refresh]);
 
+  const websiteUrl = "https://www.elephant-maker.com/";
+  const hasWebsite = project.description?.includes("elephant-maker.com");
+
   const caption = [
     project.title.trim(),
     project.description.trim(),
     project.price != null ? `ราคา ${Number(project.price).toFixed(2)} บาท` : "",
+    !hasWebsite ? `🌐 ดูเพิ่มเติมได้ที่: ${websiteUrl}` : "",
     project.hashtags
       .map(tag => tag.trim().replace(/^#+/, ""))
       .filter(Boolean)
@@ -253,6 +282,7 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
     // Default to ALL platforms selected & Immediate schedule as requested
     setSelectedPlatforms(new Set(["facebook", "youtube", "tiktok"]));
     setScheduleMode("immediate");
+    setSelectedPreset("now");
     setScheduledDateTime("");
     setData(null);
     setConfirmed(false);
@@ -414,38 +444,107 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
           </div>
 
           <div className="publish-schedule-selector">
-            <label className="section-label">เวลาที่ต้องการเผยแพร่:</label>
-            <div className="schedule-options">
-              <label className="schedule-radio">
-                <input
-                  type="radio"
-                  name="scheduleMode"
-                  value="immediate"
-                  checked={scheduleMode === "immediate"}
-                  onChange={() => setScheduleMode("immediate")}
-                />
-                <strong>ทันที (เข้าคิวเผยแพร่ตอนนี้)</strong>
-              </label>
-              <label className="schedule-radio">
-                <input
-                  type="radio"
-                  name="scheduleMode"
-                  value="scheduled"
-                  checked={scheduleMode === "scheduled"}
-                  onChange={() => setScheduleMode("scheduled")}
-                />
-                <span>ตั้งเวลาล่วงหน้า:</span>
-              </label>
-              {scheduleMode === "scheduled" && (
+            <label className="section-label">⏰ เลือกช่วงเวลาเผยแพร่:</label>
+            <div className="schedule-preset-grid">
+              <button
+                type="button"
+                className={`schedule-preset-btn ${selectedPreset === "now" ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedPreset("now");
+                  setScheduleMode("immediate");
+                  setScheduledDateTime("");
+                }}
+              >
+                <span className="preset-name">⚡ ทันที</span>
+                <span className="preset-sub">เข้าคิวเผยแพร่ตอนนี้</span>
+              </button>
+
+              <button
+                type="button"
+                className={`schedule-preset-btn ${selectedPreset === "1130" ? "active" : ""}`}
+                onClick={() => {
+                  const next = getNextOccurrence(11, 30);
+                  setSelectedPreset("1130");
+                  setScheduleMode("scheduled");
+                  setScheduledDateTime(next.localInput);
+                }}
+              >
+                <span className="preset-name">🍱 11:30 น.</span>
+                <span className="preset-sub">{getNextOccurrence(11, 30).display} (พักเที่ยง)</span>
+              </button>
+
+              <button
+                type="button"
+                className={`schedule-preset-btn ${selectedPreset === "2000" ? "active" : ""}`}
+                onClick={() => {
+                  const next = getNextOccurrence(20, 0);
+                  setSelectedPreset("2000");
+                  setScheduleMode("scheduled");
+                  setScheduledDateTime(next.localInput);
+                }}
+              >
+                <span className="preset-name">🌙 20:00 น.</span>
+                <span className="preset-sub">{getNextOccurrence(20, 0).display} (หัวค่ำ)</span>
+              </button>
+
+              <button
+                type="button"
+                className={`schedule-preset-btn ${selectedPreset === "2200" ? "active" : ""}`}
+                onClick={() => {
+                  const next = getNextOccurrence(22, 0);
+                  setSelectedPreset("2200");
+                  setScheduleMode("scheduled");
+                  setScheduledDateTime(next.localInput);
+                }}
+              >
+                <span className="preset-name">💻 22:00 น.</span>
+                <span className="preset-sub">{getNextOccurrence(22, 0).display} (สาย Maker)</span>
+              </button>
+
+              <button
+                type="button"
+                className={`schedule-preset-btn ${selectedPreset === "custom" ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedPreset("custom");
+                  setScheduleMode("scheduled");
+                  if (!scheduledDateTime) {
+                    const defaultCustom = new Date(Date.now() + 60 * 60 * 1000);
+                    const y = defaultCustom.getFullYear();
+                    const m = String(defaultCustom.getMonth() + 1).padStart(2, "0");
+                    const d = String(defaultCustom.getDate()).padStart(2, "0");
+                    const hh = String(defaultCustom.getHours()).padStart(2, "0");
+                    const mm = String(defaultCustom.getMinutes()).padStart(2, "0");
+                    setScheduledDateTime(`${y}-${m}-${d}T${hh}:${mm}`);
+                  }
+                }}
+              >
+                <span className="preset-name">📅 กำหนดเอง</span>
+                <span className="preset-sub">เลือกวัน-เวลาเฉพาะ</span>
+              </button>
+            </div>
+
+            {scheduleMode === "scheduled" && (
+              <div className="schedule-custom-box">
+                <label className="schedule-custom-label">
+                  {selectedPreset === "custom" ? "ระบุวันและเวลาที่ต้องการโพสต์:" : "เวลาที่จะเผยแพร่ (สามารถปรับเปลี่ยนได้):"}
+                </label>
                 <input
                   type="datetime-local"
                   className="schedule-datetime-input"
                   value={scheduledDateTime}
-                  onChange={e => setScheduledDateTime(e.target.value)}
+                  onChange={e => {
+                    setScheduledDateTime(e.target.value);
+                    setSelectedPreset("custom");
+                  }}
                   min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
                 />
-              )}
-            </div>
+                {scheduledDateTime && (
+                  <span className="schedule-summary-text">
+                    🕒 ระบบจะเผยแพร่อัตโนมัติใน: <strong>{new Date(scheduledDateTime).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</strong>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <section aria-label="ตัวอย่าง caption">

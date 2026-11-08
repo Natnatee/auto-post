@@ -146,6 +146,9 @@ def validate_content(snapshot):
             parts.append(f"ราคา {number:.2f} บาท")
         except (InvalidOperation, ValueError):
             raise ValueError("Invalid price") from None
+    website_url = "https://www.elephant-maker.com/"
+    if not any("elephant-maker.com" in p for p in parts):
+        parts.append(f"🌐 ดูเพิ่มเติมได้ที่: {website_url}")
     tags = snapshot.get("hashtags") or []
     if isinstance(tags, str):
         tags = tags.split()

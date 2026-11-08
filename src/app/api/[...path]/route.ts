@@ -95,6 +95,15 @@ async function handle(request: NextRequest, context: Context) {
           if (result.error) throw new HttpError(502, "โหลดโปรเจกต์ไม่สำเร็จ");
           return respond({ projects: result.data });
         }
+        if (request.method === "GET" && path === "status") {
+          const posts = await client
+            .from("posts")
+            .select("id,project_id,title,description,hashtags,scheduled_at,status,execution_mode,created_at,targets:post_targets(id,platform,status,attempts,error,published_url,external_post_id,delivery_uncertain,created_at)")
+            .order("created_at", { ascending: false })
+            .limit(100);
+          if (posts.error) throw new HttpError(502, "โหลดสถานะการเผยแพร่ไม่สำเร็จ");
+          return respond({ posts: posts.data });
+        }
         const preview = /^media\/([^/]+)\/url$/.exec(path);
         if (request.method === "GET" && preview) {
           const id = z.uuid().parse(preview[1]);
@@ -156,6 +165,8 @@ async function handle(request: NextRequest, context: Context) {
     if (retry) {
       const result = await client.rpc("retry_target", { p_target_id: z.uuid().parse(retry[1]) });
       if (result.error) throw new HttpError(400, "Retry ได้เฉพาะงานที่ failed หรือ blocked ของคุณเท่านั้น");
+      const cfWorkerUrl = process.env.CLOUDFLARE_WORKER_URL || "https://auto-post-worker.drawnewtrio.workers.dev/run";
+      fetch(cfWorkerUrl, { method: "POST", signal: AbortSignal.timeout(15000) }).catch(() => {});
       return respond({ ok: true });
     }
     throw new HttpError(404, "ไม่พบ API");

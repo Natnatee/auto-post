@@ -97,7 +97,8 @@ test("Cloudflare worker: feed post, fencing order, and 7 finish fields", async (
       "Bearer PRIVATE_TOKEN"
     );
     assert.deepEqual(JSON.parse(String(init?.body)), {
-      message: "Title\n\nDescription\n\nราคา 0.00 บาท\n\n#sale #new",
+      message:
+        "Title\n\nDescription\n\nราคา 0.00 บาท\n\n🌐 ดูเพิ่มเติมได้ที่: https://www.elephant-maker.com/\n\n#sale #new",
     });
     return jsonResponse({ id: "123_456" });
   };
@@ -156,7 +157,8 @@ test("Cloudflare worker: video remote URL and fencing order with companion image
     assert.equal(url, "https://graph.facebook.com/v27.0/123/videos");
     assert.deepEqual(JSON.parse(String(init?.body)), {
       file_url: signedVideoUrl,
-      description: "Title\n\nDescription\n\nราคา 0.00 บาท\n\n#sale #new",
+      description:
+        "Title\n\nDescription\n\nราคา 0.00 บาท\n\n🌐 ดูเพิ่มเติมได้ที่: https://www.elephant-maker.com/\n\n#sale #new",
       published: true,
     });
     return jsonResponse({ id: "456" });
