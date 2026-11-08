@@ -252,7 +252,7 @@ export class Supabase {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
-        redirect: typeof WebSocketPair !== "undefined" ? "manual" : "error",
+        redirect: typeof (globalThis as any).WebSocketPair !== "undefined" ? "manual" : "error",
         signal: AbortSignal.timeout(20_000),
       });
       if (!response.ok) {
@@ -521,7 +521,7 @@ export class Facebook {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
-        redirect: typeof WebSocketPair !== "undefined" ? "manual" : "error",
+        redirect: typeof (globalThis as any).WebSocketPair !== "undefined" ? "manual" : "error",
         signal: AbortSignal.timeout(20_000),
       });
 
