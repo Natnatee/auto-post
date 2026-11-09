@@ -175,6 +175,41 @@ test("Cloudflare worker: video remote URL and fencing order with companion image
   ]);
 });
 
+test("Cloudflare worker: media selection per platform (Facebook photo vs video, YouTube/TikTok video)", async () => {
+  const video = makeAsset({
+    mime_type: "video/mp4",
+    role: "video",
+    size_bytes: 5 * 1024 * 1024,
+    object_path: "11111111-1111-1111-1111-111111111111/video.mp4",
+  });
+  const cover = makeAsset({
+    mime_type: "image/jpeg",
+    role: "cover",
+    size_bytes: 500 * 1024,
+    object_path: "11111111-1111-1111-1111-111111111111/cover.jpg",
+  });
+
+  const snapFbPhoto = {
+    ...(makeTarget("live", [cover, video]).content_snapshot as Record<string, unknown>),
+    facebook_media_type: "photo",
+  };
+  const fbPhotoResult = validateContent(snapFbPhoto, "facebook");
+  assert.equal(fbPhotoResult.path, cover.object_path);
+
+  const snapFbVideo = {
+    ...(makeTarget("live", [cover, video]).content_snapshot as Record<string, unknown>),
+    facebook_media_type: "video",
+  };
+  const fbVideoResult = validateContent(snapFbVideo, "facebook");
+  assert.equal(fbVideoResult.path, video.object_path);
+
+  const ytResult = validateContent(snapFbPhoto, "youtube");
+  assert.equal(ytResult.path, video.object_path);
+
+  const ttResult = validateContent(snapFbPhoto, "tiktok");
+  assert.equal(ttResult.path, video.object_path);
+});
+
 test("Cloudflare worker: closed gates, simulation isolation, and error classification", async () => {
   for (const overrides of [
     { facebookLiveEnabled: false },

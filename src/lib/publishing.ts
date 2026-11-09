@@ -2,7 +2,7 @@ import { z } from "zod";
 import { publishProjectSchema } from "./validation";
 import { HttpError } from "./http";
 
-type Rpc = (args: { p_project_id: string; p_submission_key: string; p_scheduled_at: string | null; p_execution_mode: string; p_expected_updated_at?: string; p_platforms?: string[] }) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+type Rpc = (args: { p_project_id: string; p_submission_key: string; p_scheduled_at: string | null; p_execution_mode: string; p_expected_updated_at?: string; p_platforms?: string[]; p_facebook_media_type?: string }) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
 export async function submitProject(projectId: string, body: unknown, liveEnabled: boolean, rpc: Rpc) {
   z.uuid().parse(projectId);
   const input = publishProjectSchema.parse(body);
@@ -16,6 +16,7 @@ export async function submitProject(projectId: string, body: unknown, liveEnable
     p_scheduled_at: input.scheduledAt,
     p_execution_mode: input.mode,
     p_platforms: input.platforms,
+    p_facebook_media_type: input.facebookMediaType || "photo",
     ...(input.expectedUpdatedAt ? { p_expected_updated_at: input.expectedUpdatedAt } : {})
   });
   if (result.error) {

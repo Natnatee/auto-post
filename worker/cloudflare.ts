@@ -347,7 +347,8 @@ function formatPriceBaht(price: unknown): string {
 }
 
 export function validateContent(
-  snapshot: unknown
+  snapshot: unknown,
+  targetPlatform?: string
 ): { caption: string; path: string | null } {
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
     throw new ValueError("Invalid snapshot");
@@ -471,22 +472,66 @@ export function validateContent(
   }
 
   const videos: string[] = [];
+  const images: string[] = [];
   for (const [path, asset] of unique.entries()) {
     if (asset.mime_type === "video/mp4") {
       videos.push(path);
+    } else if (asset.mime_type === "image/jpeg" || asset.mime_type === "image/png") {
+      images.push(path);
     }
   }
+
+  // Find preferred cover image among assets
+  let coverImage: string | null = null;
+  for (const rawAsset of assets) {
+    const a = rawAsset as Record<string, unknown>;
+    if (a.role === "cover" && typeof a.object_path === "string" && images.includes(a.object_path)) {
+      coverImage = a.object_path;
+      break;
+    }
+  }
+  if (!coverImage && images.length > 0) {
+    coverImage = images[0];
+  }
+
   if (videos.length > 1) {
     throw new ValueError("Unsupported media: more than one unique video");
+  }
+
+  const isFb = targetPlatform === "facebook";
+  const fbMedia = snap.facebook_media_type ? String(snap.facebook_media_type) : null;
+
+  if (isFb) {
+    if (fbMedia === "video") {
+      if (videos.length > 0) return { caption, path: videos[0] };
+      if (coverImage) return { caption, path: coverImage };
+      return { caption, path: null };
+    } else if (fbMedia === "photo") {
+      if (coverImage) return { caption, path: coverImage };
+      if (videos.length > 0) return { caption, path: videos[0] };
+      return { caption, path: null };
+    } else {
+      // Legacy Facebook target with no explicit media type: default to video if exists, else photo
+      if (videos.length > 0) return { caption, path: videos[0] };
+      if (coverImage) return { caption, path: coverImage };
+      return { caption, path: null };
+    }
+  }
+
+  if (targetPlatform === "youtube" || targetPlatform === "tiktok") {
+    return { caption, path: videos[0] ?? null };
+  }
+
+  // Fallback when targetPlatform not provided (e.g. direct validateContent tests)
+  if (fbMedia === "photo") {
+    if (coverImage) return { caption, path: coverImage };
+    if (videos.length > 0) return { caption, path: videos[0] };
+    return { caption, path: null };
   }
   if (videos.length === 1) {
     return { caption, path: videos[0] };
   }
-  if (unique.size > 1) {
-    throw new ValueError("Unsupported media: more than one unique media object");
-  }
-  const firstPath = unique.keys().next().value ?? null;
-  return { caption, path: firstPath };
+  return { caption, path: coverImage ?? null };
 }
 
 export class Facebook {
@@ -765,7 +810,7 @@ export class Worker {
     let caption: string;
     let path: string | null;
     try {
-      const validated = validateContent(snapshot);
+      const validated = validateContent(snapshot, platform);
       caption = validated.caption;
       path = validated.path;
     } catch (error) {

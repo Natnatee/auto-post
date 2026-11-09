@@ -9,7 +9,7 @@ const postId = "750e8400-e29b-41d4-a716-446655440000";
 test("project submission defaults to simulation and forwards stable identity", async () => {
   let args: unknown;
   const result = await submitProject(projectId, { submissionKey }, false, async input => { args = input; return { data: postId, error: null }; });
-  assert.deepEqual(args, { p_project_id: projectId, p_submission_key: submissionKey, p_scheduled_at: null, p_execution_mode: "simulation", p_platforms: ["facebook", "youtube", "tiktok"] });
+  assert.deepEqual(args, { p_project_id: projectId, p_submission_key: submissionKey, p_scheduled_at: null, p_execution_mode: "simulation", p_platforms: ["facebook", "youtube", "tiktok"], p_facebook_media_type: "photo" });
   assert.deepEqual(result, { id: postId, mode: "simulation", published: false });
 });
 test("live requires both server enablement and explicit user confirmation", async () => {

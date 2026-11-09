@@ -144,6 +144,8 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<PlatformKey>>(
     new Set(["facebook", "youtube", "tiktok"])
   );
+  // Facebook media choice: Default to "photo", other platforms use video
+  const [facebookMediaType, setFacebookMediaType] = useState<"photo" | "video">("photo");
   // Schedule: Default to "ทันที" (Immediate = null)
   const [scheduleMode, setScheduleMode] = useState<"immediate" | "scheduled">("immediate");
   const [selectedPreset, setSelectedPreset] = useState<PresetOption>("now");
@@ -227,6 +229,10 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
 
   const media = [...new Map(project.assets.map(asset => [asset.media_id, asset.media])).values()];
   const videos = media.filter(item => item?.mime_type === "video/mp4");
+  const photos = media.filter(item => item && ["image/jpeg", "image/png"].includes(item.mime_type));
+  const hasVideo = videos.length > 0;
+  const hasPhoto = photos.length > 0;
+
   const mediaError = media.some(item => !item || item.status !== "ready")
     ? "สื่อยังไม่พร้อมหรือข้อมูลสื่อไม่ครบ"
     : media.some(item => item && !["image/jpeg", "image/png", "video/mp4"].includes(item.mime_type))
@@ -241,8 +247,14 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
     ? "รูปภาพต้องไม่เกิน 10 MiB และ MP4 ไม่เกิน 2 GiB"
     : videos.length > 1
     ? "รองรับวิดีโอเพียงหนึ่งไฟล์"
-    : !videos.length && media.length > 1
-    ? "รองรับรูปภาพเพียงหนึ่งไฟล์ (สื่อซ้ำต่างบทบาทนับครั้งเดียว)"
+    : selectedPlatforms.has("youtube") && !hasVideo
+    ? "YouTube จำเป็นต้องมีวิดีโอ MP4"
+    : selectedPlatforms.has("tiktok") && !hasVideo
+    ? "TikTok จำเป็นต้องมีวิดีโอ MP4"
+    : selectedPlatforms.has("facebook") && facebookMediaType === "video" && !hasVideo
+    ? "Facebook ในโหมดวิดีโอ จำเป็นต้องมีวิดีโอ MP4"
+    : selectedPlatforms.has("facebook") && facebookMediaType === "photo" && !hasPhoto
+    ? "Facebook ในโหมดรูปภาพ จำเป็นต้องมีรูปภาพ (JPEG หรือ PNG)"
     : !caption || caption.length > 63206
     ? "Caption ว่างหรือยาวเกินกำหนด"
     : "";
@@ -281,6 +293,7 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
   function openModal(_focusPlatform?: PlatformKey) {
     // Default to ALL platforms selected & Immediate schedule as requested
     setSelectedPlatforms(new Set(["facebook", "youtube", "tiktok"]));
+    setFacebookMediaType(hasPhoto ? "photo" : "video");
     setScheduleMode("immediate");
     setSelectedPreset("now");
     setScheduledDateTime("");
@@ -322,6 +335,7 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
           expectedUpdatedAt: request.updatedAt,
           platforms: Array.from(selectedPlatforms),
           scheduledAt: scheduledIso,
+          facebookMediaType: facebookMediaType,
         }),
       });
       if (!response.ok) {
@@ -443,6 +457,66 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
             </div>
           </div>
 
+          <div className="publish-media-format-selector">
+            <label className="section-label">🎬 รูปแบบสื่อสำหรับแต่ละช่องทาง:</label>
+            
+            {selectedPlatforms.has("facebook") && (
+              <div className="facebook-format-box">
+                <span style={{ fontSize: "13px", fontWeight: 600, display: "block", marginBottom: "6px" }}>
+                  📘 Facebook: ให้เลือกว่าจะลงเป็น <strong>รูปภาพ</strong> หรือ <strong>วิดีโอ</strong>
+                </span>
+                <div className="media-format-options">
+                  <label className={`media-format-card ${facebookMediaType === "photo" ? "active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="fbFormat"
+                      value="photo"
+                      checked={facebookMediaType === "photo"}
+                      onChange={() => setFacebookMediaType("photo")}
+                      disabled={!hasPhoto}
+                    />
+                    <span className="media-format-title">
+                      <span>📸 รูปภาพ (ค่าเริ่มต้น)</span>
+                      {facebookMediaType === "photo" && <span className="media-format-check">✓</span>}
+                    </span>
+                    <span className="media-format-desc">
+                      ลงเป็นรูปภาพพร้อมลิงก์เว็บและคำอธิบายครบถ้วน (แนะนำสำหรับกลุ่มและเพจ คนสนใจสูงกว่า)
+                    </span>
+                  </label>
+
+                  <label className={`media-format-card ${facebookMediaType === "video" ? "active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="fbFormat"
+                      value="video"
+                      checked={facebookMediaType === "video"}
+                      onChange={() => setFacebookMediaType("video")}
+                      disabled={!hasVideo}
+                    />
+                    <span className="media-format-title">
+                      <span>🎥 วิดีโอ</span>
+                      {facebookMediaType === "video" && <span className="media-format-check">✓</span>}
+                    </span>
+                    <span className="media-format-desc">
+                      ลงเป็นไฟล์วิดีโอ MP4 หน้าเพจ
+                    </span>
+                  </label>
+                </div>
+                {!hasPhoto && <p className="muted" style={{ color: "#d97706", marginTop: "4px", fontSize: "12px" }}>⚠️ โปรเจกต์นี้ไม่มีไฟล์รูปภาพ ระบบจะใช้โหมดวิดีโอ</p>}
+                {!hasVideo && <p className="muted" style={{ color: "#d97706", marginTop: "4px", fontSize: "12px" }}>⚠️ โปรเจกต์นี้ไม่มีไฟล์วิดีโอ</p>}
+              </div>
+            )}
+
+            <div className="media-format-badge-row">
+              {selectedPlatforms.has("youtube") && (
+                <span className="media-format-badge-item">🔴 YouTube: <strong>🎥 วิดีโอ (Shorts)</strong></span>
+              )}
+              {selectedPlatforms.has("tiktok") && (
+                <span className="media-format-badge-item">🎵 TikTok: <strong>🎥 วิดีโอ</strong></span>
+              )}
+            </div>
+          </div>
+
           <div className="publish-schedule-selector">
             <label className="section-label">⏰ เลือกช่วงเวลาเผยแพร่:</label>
             <div className="schedule-preset-grid">
@@ -552,15 +626,23 @@ export default function ProjectPublishing({ project, disabled = false }: { proje
             <pre className="publishing-caption">{caption}</pre>
           </section>
 
-          <p className="muted">
-            {videos.length
-              ? `แนบ MP4: ${videos[0]?.filename} — เลือกวิดีโอก่อนเสมอ ภาพปกและ gallery จะไม่ถูกแนบและไม่ใช้เป็น thumbnail`
-              : media.length === 1
-              ? `แนบ: ${media[0]?.filename || "ไม่พบข้อมูลสื่อ"}`
-              : media.length === 0
-              ? "โพสต์ข้อความเท่านั้น"
-              : "มีหลายรูปภาพ — ไม่รองรับ"}
-          </p>
+          <div className="publishing-media-summary" style={{ fontSize: "13px", color: "var(--muted)", display: "flex", flexDirection: "column", gap: "4px" }}>
+            {selectedPlatforms.has("facebook") && (
+              <p style={{ margin: 0 }}>
+                📘 <strong>Facebook:</strong> จะเผยแพร่เป็น <strong>{facebookMediaType === "photo" ? "📸 รูปภาพ (ภาพปก)" : "🎥 วิดีโอ MP4"}</strong>
+              </p>
+            )}
+            {selectedPlatforms.has("youtube") && (
+              <p style={{ margin: 0 }}>
+                🔴 <strong>YouTube:</strong> จะเผยแพร่เป็น <strong>🎥 วิดีโอ (Shorts)</strong>
+              </p>
+            )}
+            {selectedPlatforms.has("tiktok") && (
+              <p style={{ margin: 0 }}>
+                🎵 <strong>TikTok:</strong> จะเผยแพร่เป็น <strong>🎥 วิดีโอ</strong>
+              </p>
+            )}
+          </div>
           <p className="muted">รองรับข้อความ / JPEG หรือ PNG หนึ่งไฟล์ ≤10 MiB / MP4 หนึ่งไฟล์ ≤2 GiB</p>
           {gate && <p className="error">{gate}</p>}
           {stale && (

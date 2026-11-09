@@ -233,7 +233,13 @@ export function ContentLibrary({ view = "upload" }: { view?: "upload" | "project
   function stageFiles(files: File[], role: Role) {
     if (lock.current || !authorized || !files.length) return;
     if (files.length + roleCount(role) > (role === "gallery" ? 10 : 1)) { setError("จำนวนไฟล์เกินกำหนด"); return; }
-    if (files.some(file => !types.includes(file.type) || !file.size || file.size > 2 * 1024 ** 3 || (role === "video" ? !file.type.startsWith("video/") : !file.type.startsWith("image/")))) { setError("ชนิดหรือขนาดไฟล์ไม่รองรับ (สูงสุด 2 GiB)"); return; }
+    if (files.some(file => !types.includes(file.type) || !file.size || (role === "video" ? !file.type.startsWith("video/") : !file.type.startsWith("image/")))) { setError("ชนิดไฟล์ไม่รองรับ (รองรับ MP4, WebM, QuickTime, JPEG, PNG, WebP)"); return; }
+    const oversized = files.find(file => file.size > 50 * 1024 * 1024);
+    if (oversized) {
+      const mb = (oversized.size / (1024 * 1024)).toFixed(1);
+      setError(`⚠️ ไฟล์ "${oversized.name}" มีขนาด ${mb} MB ซึ่งเกินขีดจำกัด 50 MB ของ Supabase Free กรุณาบีบอัดไฟล์ก่อน`);
+      return;
+    }
     const selected = new Set([...pending.filter(item => item.role === role).map(item => fingerprint(item.file)), ...assets.filter(asset => asset.role === role).flatMap(asset => { const key = fingerprints.current.get(asset.media_id); return key ? [key] : []; })]);
     for (const file of files) {
       const key = fingerprint(file);
@@ -265,6 +271,12 @@ export function ContentLibrary({ view = "upload" }: { view?: "upload" | "project
     if (amount !== null && (!/^\d+(?:\.\d{1,2})?$/.test(price) || !Number.isFinite(amount) || amount < 0 || amount > 9999999999.99)) { setError("กรอกราคา 0–9,999,999,999.99 บาท ทศนิยมไม่เกิน 2 ตำแหน่ง"); return; }
     if (new Set(assets.map(asset => JSON.stringify([asset.media_id, asset.role]))).size !== assets.length) { setError("มีไฟล์ซ้ำ"); return; }
     if (roles.some(({ role }) => roleCount(role) > (role === "gallery" ? 10 : 1))) { setError("จำนวนไฟล์เกินกำหนด"); return; }
+    const oversized = pending.find(item => item.file.size > 50 * 1024 * 1024);
+    if (oversized) {
+      const mb = (oversized.file.size / (1024 * 1024)).toFixed(1);
+      setError(`⚠️ ไฟล์ "${oversized.file.name}" (${mb} MB) เกินขีดจำกัด 50 MB ของ Supabase Free กรุณานำออกหรือบีบอัดไฟล์ก่อน`);
+      return;
+    }
     lock.current = true; setBusy(true); setError(""); setNotice("");
     const completedAssets = [...assets];
     let uploading = true;
@@ -389,11 +401,11 @@ export function ContentLibrary({ view = "upload" }: { view?: "upload" | "project
       {view === "upload" ? <form className="library-form" noValidate onSubmit={event => { event.preventDefault(); void save(); }}>
         {editing && <div className="row"><h2>แก้ไขโปรเจกต์</h2><button type="button" disabled={busy} onClick={reset}>เริ่มใหม่</button></div>}
         <fieldset disabled={busy || !authorized} className="library-fields">
-          {roles.map(({ role, label }) => <fieldset className="library-attach" key={role}><legend>{label} ({roleCount(role)}/{role === "gallery" ? 10 : 1})</legend>
+          {roles.map(({ role, label }) => <fieldset className="library-attach" key={role}><legend>{label} ({roleCount(role)}/{role === "gallery" ? 10 : 1}) · สูงสุด 50 MB</legend>
             <input aria-label={`อัปโหลด${label}`} type="file" accept={role === "video" ? "video/mp4,video/webm,video/quicktime" : "image/jpeg,image/png,image/webp"} multiple={role === "gallery"} disabled={busy || roleCount(role) >= (role === "gallery" ? 10 : 1)} onChange={event => { const files = Array.from(event.target.files || []); event.target.value = ""; stageFiles(files, role); }} />
-            <select aria-label={`เลือก${label}ที่มีอยู่`} value="" disabled={busy || roleCount(role) >= (role === "gallery" ? 10 : 1)} onChange={event => attach(event.target.value, role)}><option value="">เลือกไฟล์ที่มีอยู่</option>{media.filter(item => item.status === "ready" && item.mime_type.startsWith(role === "video" ? "video/" : "image/") && !assets.some(asset => asset.media_id === item.id && asset.role === role)).map(item => <option key={item.id} value={item.id}>{item.filename}</option>)}</select>
+            <select aria-label={`เลือก${label}ที่มีอยู่`} value="" disabled={busy || roleCount(role) >= (role === "gallery" ? 10 : 1)} onChange={event => attach(event.target.value, role)}><option value="">เลือกไฟล์ที่มีอยู่</option>{media.filter(item => item.status === "ready" && item.mime_type.startsWith(role === "video" ? "video/" : "image/") && !assets.some(asset => asset.media_id === item.id && asset.role === role)).map(item => <option key={item.id} value={item.id}>{item.filename} ({(item.size_bytes / (1024 * 1024)).toFixed(1)} MB)</option>)}</select>
             {assets.filter(asset => asset.role === role).map(asset => <div className="row" key={`${asset.role}-${asset.media_id}`}><span className="library-filename">{media.find(item => item.id === asset.media_id)?.filename || asset.media?.filename || asset.media_id}</span><button type="button" aria-label={`นำ${asset.media?.filename || media.find(item => item.id === asset.media_id)?.filename || label}ออก`} onClick={() => setAssets(current => current.filter(item => item.media_id !== asset.media_id || item.role !== asset.role))}>×</button></div>)}
-            {pending.filter(item => item.role === role).map(item => <div className="row" key={item.id}><span className="library-filename">{item.file.name} · {label} · รอบันทึก</span><button type="button" disabled={busy} aria-label={`นำ${item.file.name}ออก`} onClick={() => setPending(current => current.filter(value => value.id !== item.id))}>×</button></div>)}
+            {pending.filter(item => item.role === role).map(item => <div className="row" key={item.id}><span className="library-filename">{item.file.name} · {label} · {(item.file.size / (1024 * 1024)).toFixed(1)} MB · รอบันทึก</span><button type="button" disabled={busy} aria-label={`นำ${item.file.name}ออก`} onClick={() => setPending(current => current.filter(value => value.id !== item.id))}>×</button></div>)}
           </fieldset>)}
           <label>ชื่อโปรเจกต์<input required maxLength={500} value={title} onChange={event => setTitle(event.target.value)} /></label>
           <div className="library-tag-field">

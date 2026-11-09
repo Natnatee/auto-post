@@ -33,6 +33,7 @@ export const publishProjectSchema = z.object({
   expectedUpdatedAt: z.string().trim().min(1).optional(),
   platforms: z.array(z.enum(["facebook", "youtube", "tiktok", "x"])).min(1).default(["facebook", "youtube", "tiktok"]),
   platform: z.enum(["facebook", "youtube", "tiktok", "x"]).optional(),
+  facebookMediaType: z.enum(["photo", "video"]).default("photo"),
 }).passthrough();
 export const extensions: Record<(typeof mediaTypes)[number], string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
